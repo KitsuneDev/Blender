@@ -424,6 +424,9 @@ class GHOST_SystemWin32 : public GHOST_System {
    * Windows call back routine for our window class.
    */
   static LRESULT WINAPI s_wndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
+  /* Used by windows callbacks to calculate multitouch gestures */
+  inline static POINT m_gestureStart;
+  inline static DWORD m_dwArguments;
 
   /**
    * Set the Console State
@@ -454,6 +457,7 @@ class GHOST_SystemWin32 : public GHOST_System {
 
   /** Wheel delta accumulator. */
   int m_wheelDeltaAccum;
+  
 };
 
 inline void GHOST_SystemWin32::handleKeyboardChange(void)

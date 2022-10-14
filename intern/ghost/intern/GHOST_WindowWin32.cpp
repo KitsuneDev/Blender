@@ -136,7 +136,8 @@ GHOST_WindowWin32::GHOST_WindowWin32(GHOST_SystemWin32 *system,
     return;
   }
 
-  RegisterTouchWindow(m_hWnd, 0);
+	/* Blender does not directly handle WM_TOUCH events, therefore this is not necessary. */
+  //RegisterTouchWindow(m_hWnd, 0);
 
   /* Register as drop-target. #OleInitialize(0) required first, done in GHOST_SystemWin32. */
   m_dropTarget = new GHOST_DropTargetWin32(this, m_system);

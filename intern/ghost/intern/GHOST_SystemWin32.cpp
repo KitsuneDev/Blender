@@ -1447,6 +1447,150 @@ LRESULT WINAPI GHOST_SystemWin32::s_wndProc(HWND hwnd, uint msg, WPARAM wParam, 
     GHOST_WindowWin32 *window = (GHOST_WindowWin32 *)::GetWindowLongPtr(hwnd, GWLP_USERDATA);
     if (window) {
       switch (msg) {
+        case WM_GESTURE: {
+          /* The WM_GESTURE message is sent to a window when a touch gesture is detected. */
+          GESTUREINFO gi;
+          ZeroMemory(&gi, sizeof(GESTUREINFO));
+          gi.cbSize = sizeof(GESTUREINFO);
+          BOOL bResult = GetGestureInfo((HGESTUREINFO)lParam, &gi);
+          int32_t cursor_x, cursor_y;
+          system->getCursorPosition(cursor_x, cursor_y);
+          if (bResult) {
+            lResult = 0;
+            // now interpret the gesture
+            switch (gi.dwID) {
+              case GID_ZOOM:
+                // Code for zooming goes here
+                eventHandled = TRUE;
+                switch (gi.dwFlags) {
+                  case GF_BEGIN:
+                    m_gestureStart.x = gi.ptsLocation.x;
+                    m_gestureStart.y = gi.ptsLocation.y;
+                    m_dwArguments = LODWORD(gi.ullArguments);
+                    ScreenToClient(hwnd, &m_gestureStart);
+                    break;
+                  case GF_END:
+                    break;
+                  default:
+                    POINT _ptSecond;
+                    _ptSecond.x = gi.ptsLocation.x;
+                    _ptSecond.y = gi.ptsLocation.y;
+                    ScreenToClient(hwnd, &_ptSecond);
+                    POINT ptZoomCenter;
+                    ptZoomCenter.x = (m_gestureStart.x + _ptSecond.x) / 2;
+                    ptZoomCenter.y = (m_gestureStart.y + _ptSecond.y) / 2;
+                    double k = (double)(LODWORD(gi.ullArguments)) / (double)(m_dwArguments);
+                    
+                    if (k < 1.0)
+                      k = (1 / k) * -1;
+                    int magnification = static_cast<int>(k * 5);
+
+                    system->pushEvent(new GHOST_EventTrackpad(system->getMilliSeconds(),
+                                                              window,
+                                                              GHOST_kTrackpadEventMagnify,
+                                                              ptZoomCenter.x,
+                                                              ptZoomCenter.y,
+                                                              magnification,
+                                                              0,
+                                                              false));
+                    m_gestureStart = _ptSecond;
+                    m_dwArguments = LODWORD(gi.ullArguments);
+                    break;
+                }
+                break;
+              case GID_PAN:
+                // Code for panning goes here
+                eventHandled = TRUE;
+                switch (gi.dwFlags) {
+                  case GF_BEGIN:
+                    m_gestureStart.x = gi.ptsLocation.x;
+                    m_gestureStart.y = gi.ptsLocation.y;
+                    ScreenToClient(hwnd, &m_gestureStart);
+                    break;
+                  case GF_END:
+                    break;
+                  default:
+                    // We read the second point of this gesture. It is a middle point
+                    // between fingers in this new position
+                    POINT _ptSecond;
+                    _ptSecond.x = gi.ptsLocation.x;
+                    _ptSecond.y = gi.ptsLocation.y;
+                    ScreenToClient(hwnd, &_ptSecond);
+
+                    // We apply move operation of the object
+                    system->pushEvent(new GHOST_EventTrackpad(system->getMilliSeconds(),
+                                                              window,
+                                                              GHOST_kTrackpadEventScroll,
+                                                              m_gestureStart.x,
+                                                              m_gestureStart.y,
+                                                              _ptSecond.x - m_gestureStart.x,
+                                                              _ptSecond.y - m_gestureStart.y,
+                                                              false));
+
+                    // We have to copy second point into first one to prepare
+                    // for the next step of this gesture.
+                    m_gestureStart = _ptSecond;
+                    break;
+                }
+                break;
+              case GID_ROTATE:
+                // Code for rotation goes here
+                eventHandled = TRUE;
+
+                switch (gi.dwFlags) {
+                  case GF_BEGIN:
+                    m_dwArguments = 0;
+                    break;
+                  case GF_END:
+                    break;
+                  default:
+                    POINT gesturePoint;
+                    gesturePoint.x = gi.ptsLocation.x;
+                    gesturePoint.y = gi.ptsLocation.y;
+                    ScreenToClient(hwnd, &gesturePoint);
+                    double angleDelta = GID_ROTATE_ANGLE_FROM_ARGUMENT(LODWORD(gi.ullArguments)) -
+                                       GID_ROTATE_ANGLE_FROM_ARGUMENT(m_dwArguments);
+                    int rotation = int(angleDelta * -500);
+
+                    system->pushEvent(new GHOST_EventTrackpad(system->getMilliSeconds(),
+                                                              window,
+                                                              GHOST_kTrackpadEventRotate,
+                                                              gesturePoint.x,
+                                                              gesturePoint.y,
+                                                              rotation,
+                                                              0,
+                                                              false));
+                    m_gestureStart = gesturePoint;
+                    m_dwArguments = LODWORD(gi.ullArguments);
+                    break;
+                }
+
+                break;
+              default:
+                // A gesture was not recognized
+                break;
+            }
+          }
+          else {
+            DWORD dwErr = GetLastError();
+            if (dwErr > 0) {
+               printf("A Touch-Screen gesture was identified, but we could not retrieve it's information.");
+
+            }
+          }
+          break;
+        }
+		
+		
+        case WM_GESTURENOTIFY: {
+          GESTURECONFIG gc = {0, GC_ALLGESTURES, 0};
+          BOOL bResult = SetGestureConfig(hwnd, 0, 1, &gc, sizeof(GESTURECONFIG));
+
+          if (!bResult) {
+            // an error
+          }
+          break;
+        }
         /* We need to check if new key layout has AltGr. */
         case WM_INPUTLANGCHANGE: {
           system->handleKeyboardChange();
@@ -2098,6 +2242,7 @@ LRESULT WINAPI GHOST_SystemWin32::s_wndProc(HWND hwnd, uint msg, WPARAM wParam, 
           }
           break;
         }
+      
       }
     }
     else {
